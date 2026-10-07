@@ -37,8 +37,12 @@ mark('TL', [[1, 5], [5, 5]]);
 mark('DL', [[0, 3], [2, 6], [3, 7], [6, 6], [6, 2]]);
 
 // --- dictionary ---
-const WORDS = new Set(fs.readFileSync(path.join(__dirname, 'data', 'words.txt'), 'utf8').split('\n').filter(Boolean));
-console.log(`Dictionary: ${WORDS.size} words`);
+let WORDS = new Set();
+
+function loadDictionary() {
+  WORDS = new Set(fs.readFileSync(path.join(__dirname, 'data', 'words.txt'), 'utf8').split('\n').filter(Boolean));
+  console.log(`Dictionary: ${WORDS.size} words`);
+}
 
 // --- game state ---
 let game = null;
@@ -47,6 +51,17 @@ let cloudConnected = false;
 let cloudError = null;
 let cloudWritesPending = 0;
 let cloudWriteQueue = Promise.resolve();
+let initialized = false;
+
+function withTimeout(promise, timeoutMs, description) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${description} timed out`)), timeoutMs);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
 
 function newBag() {
   const bag = [];
@@ -91,11 +106,11 @@ function save() {
   const savedAt = new Date().toISOString();
   cloudWritesPending++;
   cloudWriteQueue = cloudWriteQueue.then(async () => {
-    await ensureCloudTable();
-    await turso.execute({
+    await withTimeout(ensureCloudTable(), 8000, 'Turso table setup');
+    await withTimeout(turso.execute({
       sql: `INSERT INTO ${CLOUD_STATE_TABLE} (id, state_json, updated_at) VALUES (1, ?, ?) ON CONFLICT(id) DO UPDATE SET state_json = excluded.state_json, updated_at = excluded.updated_at`,
       args: [snapshot, savedAt],
-    });
+    }), 8000, 'Turso game save');
     cloudConnected = true;
     cloudError = null;
   }).catch(error => {
@@ -114,8 +129,8 @@ async function load() {
   if (TURSO_CONFIGURED) {
     turso = createClient({ url: TURSO_DATABASE_URL, authToken: TURSO_AUTH_TOKEN || undefined });
     try {
-      await ensureCloudTable();
-      const result = await turso.execute(`SELECT state_json FROM ${CLOUD_STATE_TABLE} WHERE id = 1`);
+      await withTimeout(ensureCloudTable(), 8000, 'Turso table setup');
+      const result = await withTimeout(turso.execute(`SELECT state_json FROM ${CLOUD_STATE_TABLE} WHERE id = 1`), 8000, 'Turso game load');
       if (result.rows.length) {
         game = JSON.parse(result.rows[0].state_json);
         cloudConnected = true;
@@ -341,7 +356,9 @@ function send(res, code, obj) {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   try {
-    if (req.method === 'GET' && url.pathname === '/api/health') return send(res, 200, { ok: true });
+    if (req.method === 'GET' && url.pathname === '/api/health') {
+      return send(res, 200, { ok: true, status: initialized ? 'ready' : 'starting' });
+    }
     if (req.method === 'GET' && url.pathname === '/api/storage') {
       return send(res, 200, {
         provider: TURSO_CONFIGURED ? 'turso' : 'local',
@@ -352,10 +369,12 @@ const server = http.createServer(async (req, res) => {
       });
     }
     if (req.method === 'GET' && url.pathname === '/api/state') {
+      if (!initialized) return send(res, 503, { error: 'Hra sa spúšťa, skúste to o chvíľu.' });
       const p = parseInt(url.searchParams.get('p'), 10);
       return send(res, 200, publicState(Number.isInteger(p) ? p : -1));
     }
     if (req.method === 'POST' && url.pathname.startsWith('/api/')) {
+      if (!initialized) return send(res, 503, { error: 'Hra sa spúšťa, skúste to o chvíľu.' });
       const body = await readBody(req);
       const pi = Number.isInteger(body.player) ? body.player : -1;
       if (url.pathname === '/api/new') {
@@ -386,12 +405,15 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-load().then(() => {
-  server.listen(PORT, HOST, () => {
+server.listen(PORT, HOST, async () => {
+  console.log(`Scrabble listening on ${HOST}:${PORT}; initializing game data...`);
+  try {
+    loadDictionary();
+    await load();
+    initialized = true;
     const storage = TURSO_CONFIGURED ? (cloudConnected ? 'Turso cloud' : 'Turso configured, using local fallback') : 'local JSON';
-    console.log(`Scrabble: http://${HOST}:${PORT}  (miesta: /?p=0 .. /?p=${MAX_PLAYERS - 1}, úložisko: ${storage})`);
-  });
-}).catch(error => {
-  console.error('Game initialization failed:', error);
-  process.exitCode = 1;
+    console.log(`Scrabble is ready (úložisko: ${storage}).`);
+  } catch (error) {
+    console.error('Game initialization failed:', error);
+  }
 });
