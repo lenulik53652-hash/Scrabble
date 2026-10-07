@@ -60,7 +60,7 @@
   #turnInfo { margin:0 0 13px; color:#344d3d; font-weight:750; }
   .turn-eyebrow { margin-bottom:5px; color:#89958b; font-size:10px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
   #rack { display:flex; min-height:54px; justify-content:center; gap:clamp(3px,1vw,8px); padding:9px 6px; border-radius:12px; background:#e9ece3; }
-  #rack .tile { width:clamp(35px,10vw,43px); height:clamp(35px,10vw,43px); flex:none; cursor:pointer; font-size:23px; transition:transform .16s,filter .16s; animation:tile-pop .26s ease-out both; }
+  #rack .tile { width:clamp(35px,10vw,43px); height:clamp(35px,10vw,43px); flex:none; cursor:pointer; font-size:23px; transition:transform .16s,filter .16s; }
   #rack .tile:hover { filter:brightness(1.05); transform:translateY(-3px); }
   #rack .tile small { font-size:10px; }
   button { min-height:40px; padding:9px 13px; border:1px solid #d7dfd5; border-radius:10px; background:#f3f5ef; color:#2e4636; cursor:pointer; font:inherit; font-size:13px; font-weight:700; transition:transform .16s,box-shadow .16s,background .16s; }
@@ -77,7 +77,7 @@
   #msg.err { color:#a34535; } #msg.ok { color:#287344; }
   #bag { display:none; }
   #log { max-height:205px; overflow:auto; color:#526056; font-size:12px; }
-  #log div { padding:8px 2px; border-bottom:1px solid var(--line); animation:fade-in .25s ease-out; }
+  #log div { padding:8px 2px; border-bottom:1px solid var(--line); }
   .name-field { width:100%; min-width:0; padding:10px 11px; border:1px solid #dce2d8; border-radius:9px; background:#fff; color:var(--ink); font:inherit; font-size:13px; }
   .name-field:focus,select:focus { outline:3px solid #b5d0bb; border-color:#6a9776; }
   dialog { width:min(480px,calc(100% - 28px)); max-height:90vh; padding:0; overflow:auto; border:1px solid #ffffffbb; border-radius:20px; background:var(--paper); color:var(--ink); box-shadow:0 24px 90px #081d1590; }
