@@ -140,6 +140,18 @@ function joinGame(name, token, requestedSeat) {
   return { seat, token: playerToken, name: cleanName };
 }
 
+function addLobbySeat(token) {
+  if (resolvePlayer(token) < 0) fail('Najprv sa pridajte k hre.');
+  if (!game || game.phase !== 'lobby') fail('Po začiatku hry už nemožno pridať miesto.');
+  if (game.players.length >= MAX_PLAYERS) fail(`Pri stole môžu hrať najviac ${MAX_PLAYERS} hráči.`);
+  const seat = game.players.length;
+  game.players.push({ name: '', tokenHash: null, rack: [], rackRevision: 0, score: 0 });
+  game.capacity = game.players.length;
+  game.log.push({ text: `Pridané miesto pre hráča ${seat + 1} (${game.capacity}/${MAX_PLAYERS} miest).` });
+  save();
+  return { ok: true, seat, capacity: game.capacity };
+}
+
 function save() {
   game.revision = (game.revision || 0) + 1;
   fs.mkdirSync(path.dirname(STATE_FILE), { recursive: true });
@@ -443,6 +455,11 @@ const server = http.createServer(async (req, res) => {
       }
       if (url.pathname === '/api/join') {
         const result = joinGame(body.name, req.headers['x-player-token'], Number.isInteger(body.seat) ? body.seat : undefined);
+        await cloudWriteQueue;
+        return send(res, 200, result);
+      }
+      if (url.pathname === '/api/add-seat') {
+        const result = addLobbySeat(req.headers['x-player-token']);
         await cloudWriteQueue;
         return send(res, 200, result);
       }

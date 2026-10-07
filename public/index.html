@@ -110,7 +110,7 @@
   </section>
   <div id="side">
     <div class="panel">
-      <h3>Hráči</h3><div id="players" class="players-list"></div><div id="seats" class="seat-slots" aria-label="Stav miest pri stole"></div>
+      <h3>Hráči</h3><div id="players" class="players-list"></div><div id="seats" class="seat-slots" aria-label="Stav miest pri stole"></div><button id="addSeat" class="join-button" type="button">＋ Pridať miesto (max. 4)</button>
       <p id="seatHint" class="lobby-status"></p><button id="startGame" class="primary" type="button" disabled>Začať hru</button><p id="bag" class="bag-count"></p>
     </div>
     <div class="panel turn-card">
@@ -131,9 +131,7 @@
 <footer>Každé písmeno je nová možnosť.</footer>
 <dialog id="newGameDialog" aria-labelledby="dialogTitle">
   <form id="newGameForm" class="dialog-content">
-    <h2 id="dialogTitle">Nová partia</h2><p>Vyberte počet miest pri stole. Hráči sa potom každý na svojom zariadení pridajú tlačidlom + a zadajú svoje meno.</p>
-    <label class="field-label" for="playerCount">Počet hráčov</label>
-    <select id="playerCount" class="name-field"><option value="2">2 hráči</option><option value="3">3 hráči</option><option value="4">4 hráči</option></select>
+    <h2 id="dialogTitle">Nová partia</h2><p>Začíname minimálne s dvoma miestami. Pred začiatkom môžete pridať ďalšie, najviac však štyri. Každý hráč sa pridá tlačidlom + a zadá svoje meno.</p>
     <div class="dialog-actions"><button id="cancelNewGame" type="button">Zrušiť</button><button class="primary" type="submit">Vytvoriť čakaciu miestnosť</button></div>
   </form>
 </dialog>
@@ -272,7 +270,9 @@ function render() {
     ? `Hra prebieha · ${joinedCount}/${S.capacity} hráči. Vaše miesto je uzamknuté.`
     : `${joinedCount}/${S.capacity} hráči sa pridali. Všetci musia zadať meno pred začiatkom.`;
   $('startGame').hidden = S.phase !== 'lobby';
-  $('startGame').disabled = !validSeat || joinedCount !== S.capacity;
+  $('startGame').disabled = !validSeat || S.capacity < 2 || joinedCount !== S.capacity;
+  $('addSeat').hidden = S.phase !== 'lobby' || !validSeat || S.capacity >= 4;
+  $('addSeat').disabled = !validSeat || S.phase !== 'lobby' || S.capacity >= 4;
 
   const mine = S.phase === 'playing' && !S.over && S.turn === seat;
   $('turnInfo').textContent = S.phase === 'lobby' ? 'Čaká sa na hráčov a spustenie hry.' :
@@ -344,20 +344,25 @@ $('exchange').onclick = async () => {
   catch (e) { msg(e.message, 'err'); }
 };
 $('newGame').onclick = () => {
-  $('playerCount').value = String(S?.playerCount || 2);
   $('newGameDialog').showModal();
 };
 $('cancelNewGame').onclick = () => $('newGameDialog').close();
 $('newGameForm').onsubmit = async event => {
   event.preventDefault();
   if (S && !confirm('Začať novú hru? Aktuálna partia sa nahradí.')) return;
-  const count = Number($('playerCount').value);
   try {
-    await api('/api/new', { playerCount: count });
+    await api('/api/new', { playerCount: 2 });
     localStorage.removeItem(PLAYER_TOKEN_KEY);
     seat = -1;
     $('newGameDialog').close();
     lastRackKey = '';
+    await refresh();
+  } catch (e) { msg(e.message, 'err'); }
+};
+
+$('addSeat').onclick = async () => {
+  try {
+    await api('/api/add-seat', {});
     await refresh();
   } catch (e) { msg(e.message, 'err'); }
 };

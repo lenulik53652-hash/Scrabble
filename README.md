@@ -1,6 +1,6 @@
 # Slovenský Scrabble
 
-A responsive Slovak Scrabble game for 2–4 players. Create a lobby for 2, 3, or 4, then each player joins from their own device with **＋ Pridať sa** and enters their name. Once every seat is claimed, a player presses **Začať hru** to deal the racks. A seat is bound to a private device token; changing the URL cannot switch to another player's rack. The Slovak tile bag intentionally excludes Q and W.
+A responsive Slovak Scrabble game for 2–4 players. A lobby starts with two seats; a joined player can add seats up to the four-player maximum before the game starts. Each player joins from their own device with **＋ Pridať sa** and enters their name. Once every opened seat is claimed, a player presses **Začať hru** to deal the racks. A seat is bound to a private device token; changing the URL cannot switch to another player's rack. The Slovak tile bag intentionally excludes Q and W.
 
 ## Play online
 
