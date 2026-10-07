@@ -3,6 +3,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { createClient } = require('@libsql/client');
 
 const PORT = process.env.PORT || 3000;
@@ -14,13 +15,13 @@ const TURSO_CONFIGURED = Boolean(TURSO_DATABASE_URL && (TURSO_AUTH_TOKEN || TURS
 const CLOUD_STATE_TABLE = 'scrabble_game_state';
 const SIZE = 15, RACK = 7, BINGO = 50, MIN_PLAYERS = 2, MAX_PLAYERS = 4;
 
-// letter -> [count, points]; 110 letters + 2 jokers ('?', 0 points); source: hramescrabble.sk ("slovenský m" + Q, W)
+// Slovak tile distribution; Q and W are intentionally not included.
 const TILES = {
   A: [9, 1], E: [8, 1], I: [6, 1], N: [5, 1], O: [10, 1], S: [5, 1], T: [4, 1], V: [5, 1],
   B: [2, 2], 'Á': [2, 2], D: [3, 2], J: [2, 2], K: [4, 2], L: [4, 2], M: [3, 2], P: [3, 2], R: [5, 2], U: [3, 2], Y: [2, 2], Z: [2, 2],
   C: [1, 3], 'Č': [1, 3], 'É': [1, 3], H: [1, 3], 'Í': [1, 3], 'Š': [1, 3], 'Ú': [1, 3], 'Ý': [1, 3], 'Ž': [1, 3],
   'Ť': [1, 4], 'Ľ': [1, 5], F: [1, 6], G: [1, 6], 'Ň': [1, 7], 'Ô': [1, 7],
-  'Ä': [1, 8], 'Ď': [1, 8], 'Ó': [1, 8], 'Ĺ': [1, 9], 'Ŕ': [1, 9], X: [1, 9], Q: [1, 10], W: [1, 10],
+  'Ä': [1, 8], 'Ď': [1, 8], 'Ó': [1, 8], 'Ĺ': [1, 9], 'Ŕ': [1, 9], X: [1, 9],
 };
 const POINTS = Object.fromEntries(Object.entries(TILES).map(([k, v]) => [k, v[1]]));
 POINTS['?'] = 0;
@@ -78,26 +79,69 @@ function refill(p) {
   while (p.rack.length < RACK && game.bag.length) p.rack.push(game.bag.pop());
 }
 
-function newGame(names, playerCount = 2) {
+function createLobby(playerCount = 2) {
   const count = Number(playerCount);
   if (!Number.isInteger(count) || count < MIN_PLAYERS || count > MAX_PLAYERS) {
     fail(`Počet hráčov musí byť od ${MIN_PLAYERS} do ${MAX_PLAYERS}.`);
   }
   game = {
     id: Date.now(),
+    phase: 'lobby',
+    capacity: count,
     board: Array.from({ length: SIZE }, () => Array(SIZE).fill(null)), // {l: letter, j: isJoker}
-    bag: newBag(),
+    bag: [],
     players: Array.from({ length: count }, (_, i) => ({
-      name: (names && names[i] && String(names[i]).slice(0, 20)) || `Hráč ${i + 1}`, rack: [], score: 0,
+      name: '', tokenHash: null, rack: [], rackRevision: 0, score: 0,
     })),
-    turn: 0, firstMove: true, passes: 0, over: false, winner: null, log: [],
+    turn: 0, firstMove: true, passes: 0, over: false, winner: null, log: [], revision: 0,
   };
-  game.players.forEach(refill);
-  game.turn = Math.floor(Math.random() * count);
+  game.log.push({ text: `Čaká sa na ${count} hráčov. Pridajte sa pomocou tlačidla +.` });
   save();
 }
 
+function startGame() {
+  if (!game || game.phase !== 'lobby') fail('Hra už bola spustená.');
+  if (game.players.some(p => !p.tokenHash || !p.name.trim())) fail('Hru možno spustiť až po pripojení všetkých hráčov a zadaní ich mien.');
+  game.phase = 'playing';
+  game.bag = newBag();
+  game.players.forEach(player => {
+    refill(player);
+    player.rackRevision++;
+  });
+  game.turn = Math.floor(Math.random() * game.players.length);
+  game.log.push({ text: `Hra sa začala. Hrá ${game.players.length} hráčov.` });
+  save();
+}
+
+function tokenHash(token) {
+  return crypto.createHash('sha256').update(String(token || '')).digest('hex');
+}
+
+function resolvePlayer(token) {
+  if (!game || !token) return -1;
+  const supplied = tokenHash(token);
+  return game.players.findIndex(player => player.tokenHash && crypto.timingSafeEqual(Buffer.from(player.tokenHash), Buffer.from(supplied)));
+}
+
+function joinGame(name, token, requestedSeat) {
+  if (!game || game.phase !== 'lobby') fail('Do tejto hry sa už nemožno pridať. Požiadajte o novú hru.');
+  const cleanName = String(name || '').trim().slice(0, 20);
+  if (!cleanName) fail('Zadajte svoje meno.');
+  const existingSeat = resolvePlayer(token);
+  if (existingSeat >= 0) return { seat: existingSeat, token, name: game.players[existingSeat].name };
+  const firstOpenSeat = game.players.findIndex(player => !player.tokenHash);
+  const seat = Number.isInteger(requestedSeat) ? requestedSeat : firstOpenSeat;
+  if (seat < 0 || seat >= game.players.length || game.players[seat].tokenHash) fail('Toto miesto už nie je voľné. Vyberte iné miesto.');
+  const playerToken = crypto.randomBytes(32).toString('base64url');
+  game.players[seat].name = cleanName;
+  game.players[seat].tokenHash = tokenHash(playerToken);
+  game.log.push({ text: `${cleanName} sa pridal(a) k hre (${seat + 1}/${game.capacity}).` });
+  save();
+  return { seat, token: playerToken, name: cleanName };
+}
+
 function save() {
+  game.revision = (game.revision || 0) + 1;
   fs.mkdirSync(path.dirname(STATE_FILE), { recursive: true });
   fs.writeFileSync(STATE_FILE, JSON.stringify(game));
   if (!turso) return Promise.resolve();
@@ -133,6 +177,8 @@ async function load() {
       const result = await withTimeout(turso.execute(`SELECT state_json FROM ${CLOUD_STATE_TABLE} WHERE id = 1`), 8000, 'Turso game load');
       if (result.rows.length) {
         game = JSON.parse(result.rows[0].state_json);
+        migrateGameState();
+        await cloudWriteQueue;
         cloudConnected = true;
         cloudError = null;
         console.log('Game state loaded from Turso cloud database.');
@@ -152,11 +198,22 @@ async function load() {
 
   try {
     game = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+    migrateGameState();
     if (turso) await save(); // Migrate the existing local game into a newly configured database.
   } catch {
-    newGame();
+    createLobby(2);
     await cloudWriteQueue;
   }
+}
+
+function migrateGameState() {
+  if (!game || !Array.isArray(game.players)) {
+    createLobby(2);
+    return;
+  }
+  if (game.phase && game.capacity && game.players.every(player => Object.hasOwn(player, 'tokenHash'))) return;
+  // Existing games used shareable ?p= seat numbers. Reset to a private-token lobby rather than allowing seat switching.
+  createLobby(2);
 }
 
 // --- move logic ---
@@ -262,7 +319,7 @@ function finishGame() {
 }
 
 function requireTurn(pi) {
-  if (!game || game.over) fail('Hra neprebieha.');
+  if (!game || game.phase !== 'playing' || game.over) fail('Hra ešte neprebieha. Počkajte, kým sa všetci hráči pripoja a hra sa spustí.');
   if (pi !== game.turn) fail('Nie ste na ťahu.');
 }
 
@@ -274,6 +331,7 @@ const actions = {
     if (!commit) return { ok: true, points: res.points, words: res.words, bingo: res.bingo };
     for (const t of res.tiles) game.board[t.r][t.c] = { l: t.l, j: t.j };
     p.rack = res.rack;
+    p.rackRevision++;
     p.score += res.points;
     refill(p);
     game.firstMove = false;
@@ -284,7 +342,7 @@ const actions = {
     return { ok: true, points: res.points };
   },
   name(pi, body) {
-    if (!game) fail('Hra neprebieha.');
+    if (!game || game.phase !== 'lobby') fail('Meno už nemožno meniť po začiatku hry.');
     const n = String(body.name || '').trim().slice(0, 20);
     if (!n) fail('Meno nesmie byť prázdne.');
     game.players[pi].name = n;
@@ -312,6 +370,7 @@ const actions = {
     if (!give.length) fail('Vyberte písmená na výmenu.');
     p.rack = rack;
     refill(p);
+    p.rackRevision++;
     game.bag.push(...give);
     for (let i = game.bag.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -328,11 +387,11 @@ const actions = {
 function publicState(pi) {
   return {
     size: SIZE, premium: PREMIUM, points: POINTS, board: game.board, bagCount: game.bag.length,
-    players: game.players.map((p, i) => ({ name: p.name, score: p.score, rackCount: p.rack.length, you: i === pi })),
-    turn: game.turn, over: game.over, winner: game.winner, log: game.log.slice(-30),
+    players: game.players.map((p, i) => ({ name: p.name, joined: Boolean(p.tokenHash), score: p.score, rackCount: p.rack.length, rackRevision: p.rackRevision || 0, you: i === pi })),
+    turn: game.turn, over: game.over, phase: game.phase, winner: game.winner, log: game.log.slice(-30),
     rack: pi >= 0 && pi < game.players.length ? game.players[pi].rack : [], seat: pi,
-    playerCount: game.players.length,
-    gameId: game.id, firstMove: game.firstMove,
+    playerCount: game.players.length, capacity: game.capacity,
+    gameId: game.id, revision: game.revision || 0, firstMove: game.firstMove,
     tileCount: { letters: Object.values(TILES).reduce((s, v) => s + v[0], 0), jokers: 2 },
   };
 }
@@ -370,15 +429,26 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/api/state') {
       if (!initialized) return send(res, 503, { error: 'Hra sa spúšťa, skúste to o chvíľu.' });
-      const p = parseInt(url.searchParams.get('p'), 10);
-      return send(res, 200, publicState(Number.isInteger(p) ? p : -1));
+      const seat = resolvePlayer(req.headers['x-player-token']);
+      return send(res, 200, publicState(seat));
     }
     if (req.method === 'POST' && url.pathname.startsWith('/api/')) {
       if (!initialized) return send(res, 503, { error: 'Hra sa spúšťa, skúste to o chvíľu.' });
       const body = await readBody(req);
-      const pi = Number.isInteger(body.player) ? body.player : -1;
+      const pi = resolvePlayer(req.headers['x-player-token']);
       if (url.pathname === '/api/new') {
-        newGame(body.names, body.playerCount);
+        createLobby(body.playerCount);
+        await cloudWriteQueue;
+        return send(res, 200, { ok: true });
+      }
+      if (url.pathname === '/api/join') {
+        const result = joinGame(body.name, req.headers['x-player-token'], Number.isInteger(body.seat) ? body.seat : undefined);
+        await cloudWriteQueue;
+        return send(res, 200, result);
+      }
+      if (url.pathname === '/api/start') {
+        if (pi < 0) fail('Najprv sa pridajte k hre.');
+        startGame();
         await cloudWriteQueue;
         return send(res, 200, { ok: true });
       }

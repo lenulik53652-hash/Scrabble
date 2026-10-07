@@ -48,7 +48,12 @@
   .player.turn .player-score { color:#785a1f; }
   .seat-links { display:flex; flex-wrap:wrap; gap:7px; margin-top:12px; }
   .seat-link { display:inline-flex; min-height:34px; align-items:center; justify-content:center; padding:6px 10px; border:1px solid #d7dfd5; border-radius:999px; background:#fff; color:#385343; font-size:12px; font-weight:700; text-decoration:none; transition:all .18s; }
-  .seat-link:hover,.seat-link.me { border-color:#51785e; background:#eaf2e9; color:#234831; transform:translateY(-1px); }
+  .seat-link.me { border-color:#51785e; background:#eaf2e9; color:#234831; }
+  .seat-slot { min-height:37px; display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 10px; border:1px solid #e5e8de; border-radius:10px; background:#fff; color:#65736a; font-size:12px; }
+  .seat-slot.occupied { color:#344d3d; font-weight:700; }
+  .seat-slots { display:grid; gap:6px; margin-top:12px; }
+  .join-button { min-height:29px; padding:4px 9px; border-color:#6b8b70; background:#edf5ee; color:#285e43; }
+  .lobby-status { margin:12px 0 0; color:#748078; font-size:12px; line-height:1.5; }
   .seat-hint { margin:10px 0 0; color:var(--muted); font-size:12px; line-height:1.5; }
   .bag-count { margin:13px 0 0; padding-top:12px; border-top:1px solid var(--line); color:#68776c; font-size:12px; }
   .turn-card { background:linear-gradient(145deg,#fffef9,#f2f4ed); }
@@ -73,16 +78,14 @@
   #bag { display:none; }
   #log { max-height:205px; overflow:auto; color:#526056; font-size:12px; }
   #log div { padding:8px 2px; border-bottom:1px solid var(--line); animation:fade-in .25s ease-out; }
-  #nameInput,.name-field { width:100%; min-width:0; padding:10px 11px; border:1px solid #dce2d8; border-radius:9px; background:#fff; color:var(--ink); font:inherit; font-size:13px; }
-  #nameInput:focus,.name-field:focus,select:focus { outline:3px solid #b5d0bb; border-color:#6a9776; }
-  .row input { flex:1 1 150px; }
+  .name-field { width:100%; min-width:0; padding:10px 11px; border:1px solid #dce2d8; border-radius:9px; background:#fff; color:var(--ink); font:inherit; font-size:13px; }
+  .name-field:focus,select:focus { outline:3px solid #b5d0bb; border-color:#6a9776; }
   dialog { width:min(480px,calc(100% - 28px)); max-height:90vh; padding:0; overflow:auto; border:1px solid #ffffffbb; border-radius:20px; background:var(--paper); color:var(--ink); box-shadow:0 24px 90px #081d1590; }
   dialog::backdrop { background:#071d15b8; backdrop-filter:blur(5px); }
   .dialog-content { padding:23px; }
   .dialog-content h2 { margin:0 0 6px; font-family:Georgia,"Times New Roman",serif; font-size:25px; }
   .dialog-content>p { margin:0 0 17px; color:#748078; font-size:13px; line-height:1.5; }
   .field-label { display:block; margin:13px 0 6px; color:#54645a; font-size:12px; font-weight:750; }
-  #nameFields { display:grid; grid-template-columns:1fr 1fr; gap:0 12px; }
   .dialog-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:20px; }
   footer { padding:0 16px 22px; color:#a9bdb0; font-size:11px; text-align:center; }
   @keyframes tile-drop { from { opacity:0; transform:translateY(-16px) scale(.78) rotate(-5deg); } to { opacity:1; transform:translateY(0) scale(1) rotate(0); } }
@@ -107,9 +110,8 @@
   </section>
   <div id="side">
     <div class="panel">
-      <h3>Hráči</h3><div id="players" class="players-list"></div><div id="seats" class="seat-links" aria-label="Vyberte si miesto pri stole"></div>
-      <p id="seatHint" class="seat-hint"></p><p id="bag" class="bag-count"></p>
-      <div class="row"><input id="nameInput" maxlength="20" placeholder="Vaše meno" aria-label="Vaše meno"><button id="saveName" type="button">Uložiť</button></div>
+      <h3>Hráči</h3><div id="players" class="players-list"></div><div id="seats" class="seat-slots" aria-label="Stav miest pri stole"></div>
+      <p id="seatHint" class="lobby-status"></p><button id="startGame" class="primary" type="button" disabled>Začať hru</button><p id="bag" class="bag-count"></p>
     </div>
     <div class="panel turn-card">
       <div class="turn-eyebrow">Priebeh hry</div><div id="turnInfo"></div>
@@ -129,15 +131,22 @@
 <footer>Každé písmeno je nová možnosť.</footer>
 <dialog id="newGameDialog" aria-labelledby="dialogTitle">
   <form id="newGameForm" class="dialog-content">
-    <h2 id="dialogTitle">Nová partia</h2><p>Vyberte počet hráčov a zadajte mená. Ostatní sa môžu pripojiť z vlastného zariadenia výberom svojho miesta.</p>
+    <h2 id="dialogTitle">Nová partia</h2><p>Vyberte počet miest pri stole. Hráči sa potom každý na svojom zariadení pridajú tlačidlom + a zadajú svoje meno.</p>
     <label class="field-label" for="playerCount">Počet hráčov</label>
     <select id="playerCount" class="name-field"><option value="2">2 hráči</option><option value="3">3 hráči</option><option value="4">4 hráči</option></select>
-    <div id="nameFields"></div>
-    <div class="dialog-actions"><button id="cancelNewGame" type="button">Zrušiť</button><button class="primary" type="submit">Rozdať písmená</button></div>
+    <div class="dialog-actions"><button id="cancelNewGame" type="button">Zrušiť</button><button class="primary" type="submit">Vytvoriť čakaciu miestnosť</button></div>
+  </form>
+</dialog>
+<dialog id="joinDialog" aria-labelledby="joinTitle">
+  <form id="joinForm" class="dialog-content">
+    <h2 id="joinTitle">Pridať sa k hre</h2><p>Vaše miesto bude uzamknuté pre toto zariadenie. Po pridaní sa už nemožno prepnúť na iného hráča.</p>
+    <label class="field-label" for="joinName">Vaše meno</label>
+    <input id="joinName" class="name-field" maxlength="20" autocomplete="nickname" required placeholder="Zadajte svoje meno">
+    <div class="dialog-actions"><button id="cancelJoin" type="button">Zrušiť</button><button class="primary" type="submit">＋ Pridať sa</button></div>
   </form>
 </dialog>
 <script>
-let seat = Number.parseInt(new URLSearchParams(location.search).get('p') ?? '-1', 10);
+let seat = -1;
 let S = null;            // server state
 let pending = [];        // {r,c,letter,joker,rackIdx}
 let selected = null;     // selected rack index
@@ -145,10 +154,16 @@ let exchangeMode = false, xchSet = new Set();
 let order = null;        // local rack ordering (indexes into S.rack)
 let lastRackKey = '';
 let freshCells = new Set();
+let joiningSeat = -1;
+let refreshSequence = 0;
+const PLAYER_TOKEN_KEY = 'slovakScrabblePlayerToken';
 
 const $ = id => document.getElementById(id);
 const api = async (path, body) => {
-  const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ player: seat, ...body }) });
+  const headers = { 'Content-Type': 'application/json' };
+  const playerToken = localStorage.getItem(PLAYER_TOKEN_KEY);
+  if (playerToken) headers['X-Player-Token'] = playerToken;
+  const r = await fetch(path, { method: 'POST', headers, body: JSON.stringify(body || {}) });
   const j = await r.json();
   if (!r.ok) throw new Error(j.error || 'Chyba');
   return j;
@@ -156,13 +171,20 @@ const api = async (path, body) => {
 const msg = (t, cls = '') => { $('msg').textContent = t; $('msg').className = cls; };
 
 async function refresh() {
+  const requestSequence = ++refreshSequence;
+  const headers = {};
+  const playerToken = localStorage.getItem(PLAYER_TOKEN_KEY);
+  if (playerToken) headers['X-Player-Token'] = playerToken;
   const [r, storageResponse] = await Promise.all([
-    fetch(`/api/state?p=${seat}`),
+    fetch('/api/state', { headers }),
     fetch('/api/storage'),
   ]);
+  if (requestSequence !== refreshSequence) return;
   if (!r.ok) throw new Error('Stav hry sa nepodarilo načítať.');
   const [ns, storage] = await Promise.all([r.json(), storageResponse.ok ? storageResponse.json() : Promise.resolve(null)]);
-  const key = ns.gameId + ':' + seat + ':' + ns.rack.join('');
+  if (requestSequence !== refreshSequence) return;
+  seat = ns.seat;
+  const key = `${ns.gameId}:${seat}:${ns.players[seat]?.rackRevision ?? -1}`;
   freshCells = new Set();
   if (S && S.gameId === ns.gameId) {
     for (let r = 0; r < ns.size; r++) for (let c = 0; c < ns.size; c++) {
@@ -218,28 +240,44 @@ function render() {
 
   $('seats').innerHTML = '';
   for (let i = 0; i < S.players.length; i++) {
-    const a = document.createElement('a'); a.href = `/?p=${i}`; a.className = 'seat-link';
-    a.textContent = `${i + 1}. ${S.players[i].name}`;
-    if (i === seat) a.classList.add('me');
-    $('seats').appendChild(a);
+    const player = S.players[i];
+    const slot = document.createElement('div');
+    slot.className = `seat-slot ${player.joined ? 'occupied' : ''}`;
+    const label = document.createElement('span');
+    label.textContent = player.joined ? `${i + 1}. ${player.name}${i === seat ? ' · Vy' : ''}` : `${i + 1}. Voľné miesto`;
+    slot.appendChild(label);
+    if (!player.joined && S.phase === 'lobby') {
+      const add = document.createElement('button');
+      add.type = 'button';
+      add.className = 'join-button';
+      add.textContent = '＋ Pridať sa';
+      add.onclick = () => openJoinDialog(i);
+      slot.appendChild(add);
+    } else if (player.joined && i === seat) {
+      const own = document.createElement('span'); own.className = 'seat-link me'; own.textContent = 'Uzamknuté'; slot.appendChild(own);
+    } else if (!player.joined) {
+      const waiting = document.createElement('span'); waiting.textContent = 'Hra spustená'; slot.appendChild(waiting);
+    }
+    $('seats').appendChild(slot);
   }
 
   $('players').innerHTML = S.players.map((p, i) =>
-    `<div class="player ${i === S.turn && !S.over ? 'turn' : ''} ${i === seat ? 'you' : ''}"><span class="player-name">${esc(p.name)}${i === seat ? ' · vy' : ''}</span><span class="player-score">${p.score} b. · ${p.rackCount} p.</span></div>`).join('');
-  $('bag').textContent = `Vo vrecúšku: ${S.bagCount} z ${S.tileCount.letters + S.tileCount.jokers} (${S.tileCount.letters} písmen + ${S.tileCount.jokers} žolíky)`;
+    `<div class="player ${i === S.turn && S.phase === 'playing' && !S.over ? 'turn' : ''} ${i === seat ? 'you' : ''}"><span class="player-name">${p.joined ? esc(p.name) : 'Čaká sa na hráča'}${i === seat ? ' · vy' : ''}</span><span class="player-score">${p.joined ? `${p.score} b. · ${p.rackCount} p.` : 'Miesto voľné'}</span></div>`).join('');
+  $('bag').textContent = S.phase === 'playing'
+    ? `Vo vrecúšku: ${S.bagCount} z ${S.tileCount.letters + S.tileCount.jokers} (${S.tileCount.letters} písmen + ${S.tileCount.jokers} žolíky)`
+    : 'Písmená sa rozdajú až po spustení hry.';
   const validSeat = seat >= 0 && seat < S.players.length;
-  $('seatHint').textContent = validSeat
-    ? `Toto zariadenie hrá ako ${S.players[seat].name}. Ostatní si vyberú svoje miesto na svojom zariadení.`
-    : 'Vyberte si svoje miesto pri stole. Každý hráč si na svojom zariadení zvolí vlastné miesto.';
-  $('nameInput').disabled = !validSeat;
-  $('saveName').disabled = !validSeat;
-  if (document.activeElement !== $('nameInput')) {
-    $('nameInput').value = validSeat ? (localStorage.getItem('scrabbleName' + seat) || S.players[seat].name) : '';
-  }
+  const joinedCount = S.players.filter(player => player.joined).length;
+  $('seatHint').textContent = S.phase === 'playing'
+    ? `Hra prebieha · ${joinedCount}/${S.capacity} hráči. Vaše miesto je uzamknuté.`
+    : `${joinedCount}/${S.capacity} hráči sa pridali. Všetci musia zadať meno pred začiatkom.`;
+  $('startGame').hidden = S.phase !== 'lobby';
+  $('startGame').disabled = !validSeat || joinedCount !== S.capacity;
 
-  const mine = !S.over && S.turn === seat;
-  $('turnInfo').textContent = S.over ? `Koniec hry. Víťaz: ${S.winner.map(i => S.players[i].name).join(', ')}` :
-    !validSeat ? 'Najprv si vyberte miesto pri stole.' : mine ? 'Ste na ťahu' : `Na ťahu: ${S.players[S.turn].name}`;
+  const mine = S.phase === 'playing' && !S.over && S.turn === seat;
+  $('turnInfo').textContent = S.phase === 'lobby' ? 'Čaká sa na hráčov a spustenie hry.' :
+    S.over ? `Koniec hry. Víťaz: ${S.winner.map(i => S.players[i].name).join(', ')}` :
+    !validSeat ? 'Pridajte sa do hry tlačidlom +.' : mine ? 'Ste na ťahu' : `Na ťahu: ${S.players[S.turn].name}`;
 
   const rack = $('rack'); rack.innerHTML = '';
   const used = new Set(pending.map(p => p.rackIdx));
@@ -257,7 +295,7 @@ function render() {
 
   $('play').disabled = !mine || !pending.length;
   $('recall').disabled = !validSeat || !pending.length;
-  $('shuffle').disabled = !validSeat || S.rack.length < 2;
+  $('shuffle').disabled = !mine || S.rack.length < 2;
   $('exchange').disabled = !mine || S.bagCount < 7;
   $('exchange').textContent = exchangeMode ? 'Potvrdiť výmenu' : 'Vymeniť';
   $('pass').disabled = !mine;
@@ -283,7 +321,7 @@ function onCell(r, c, placed, pend) {
 }
 
 async function preview() {
-  if (!pending.length || S.turn !== seat) return msg('');
+  if (!pending.length || S.phase !== 'playing' || S.turn !== seat) return msg('');
   try {
     const j = await api('/api/preview', { tiles: pending });
     msg(`${j.words.map(w => `${w.word} (${w.points})`).join(', ')}${j.bingo ? ' + 50 bonus' : ''} = ${j.points} b.`, 'ok');
@@ -305,29 +343,8 @@ $('exchange').onclick = async () => {
   try { await api('/api/exchange', { letters: [...xchSet].map(i => S.rack[i]) }); await refresh(); }
   catch (e) { msg(e.message, 'err'); }
 };
-function updateNameFields() {
-  const count = Number($('playerCount').value);
-  const fields = $('nameFields');
-  fields.innerHTML = '';
-  for (let i = 0; i < count; i++) {
-    const label = document.createElement('label');
-    label.className = 'field-label';
-    label.htmlFor = `playerName${i}`;
-    label.textContent = `Hráč ${i + 1}`;
-    const input = document.createElement('input');
-    input.id = `playerName${i}`;
-    input.className = 'name-field';
-    input.maxLength = 20;
-    input.placeholder = `Hráč ${i + 1}`;
-    input.value = S?.players[i]?.name || '';
-    fields.append(label, input);
-  }
-}
-
-$('playerCount').onchange = updateNameFields;
 $('newGame').onclick = () => {
   $('playerCount').value = String(S?.playerCount || 2);
-  updateNameFields();
   $('newGameDialog').showModal();
 };
 $('cancelNewGame').onclick = () => $('newGameDialog').close();
@@ -335,17 +352,39 @@ $('newGameForm').onsubmit = async event => {
   event.preventDefault();
   if (S && !confirm('Začať novú hru? Aktuálna partia sa nahradí.')) return;
   const count = Number($('playerCount').value);
-  const names = Array.from({ length: count }, (_, i) => $(`playerName${i}`).value.trim() || `Hráč ${i + 1}`);
   try {
-    await api('/api/new', { names, playerCount: count });
+    await api('/api/new', { playerCount: count });
+    localStorage.removeItem(PLAYER_TOKEN_KEY);
+    seat = -1;
     $('newGameDialog').close();
-    if (seat < 0 || seat >= count) {
-      seat = 0;
-      history.replaceState(null, '', '/?p=0');
-    }
     lastRackKey = '';
     await refresh();
   } catch (e) { msg(e.message, 'err'); }
+};
+
+function openJoinDialog(requestedSeat) {
+  joiningSeat = requestedSeat;
+  $('joinName').value = '';
+  $('joinDialog').showModal();
+  $('joinName').focus();
+}
+
+$('cancelJoin').onclick = () => $('joinDialog').close();
+$('joinForm').onsubmit = async event => {
+  event.preventDefault();
+  try {
+    const result = await api('/api/join', { seat: joiningSeat, name: $('joinName').value });
+    localStorage.setItem(PLAYER_TOKEN_KEY, result.token);
+    seat = result.seat;
+    $('joinDialog').close();
+    await refresh();
+  } catch (e) { msg(e.message, 'err'); $('joinDialog').close(); }
+};
+
+$('startGame').onclick = async () => {
+  if (!confirm('Všetci hráči sú pripravení. Rozdať písmená a začať hru?')) return;
+  try { await api('/api/start', {}); await refresh(); }
+  catch (e) { msg(e.message, 'err'); }
 };
 
 $('shareGame').onclick = async () => {
@@ -359,13 +398,8 @@ $('shareGame').onclick = async () => {
   }
 };
 
-$('saveName').onclick = async () => {
-  try { await api('/api/name', { name: $('nameInput').value }); localStorage.setItem('scrabbleName' + seat, $('nameInput').value.trim()); await refresh(); msg('Meno uložené.', 'ok'); }
-  catch (e) { msg(e.message, 'err'); }
-};
-
 refresh().then(() => {
-  if (S.playerCount < 2) $('playerCount').value = '2';
+  // Player identity comes only from the server-issued token, never from an editable URL seat number.
 }).catch(() => {
   $('connection').classList.add('offline');
   $('connection').textContent = 'Offline';
