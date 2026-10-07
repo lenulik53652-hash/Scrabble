@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slovenský Scrabble</title>
+<style>
+  :root { --cell: min(5.6vw, 44px); }
+  body { font-family: system-ui, sans-serif; margin: 0; background: #2b3a2f; color: #222; }
+  header { background: #1c261f; color: #fff; padding: 8px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  header h1 { font-size: 18px; margin: 0 12px 0 0; }
+  header a { color: #cfe; padding: 3px 8px; border-radius: 4px; text-decoration: none; border: 1px solid #567; }
+  header a.me { background: #e8b84a; color: #000; border-color: #e8b84a; }
+  main { display: flex; gap: 16px; padding: 16px; flex-wrap: wrap; justify-content: center; }
+  #board { display: grid; grid-template-columns: repeat(15, var(--cell)); gap: 2px; background: #1c261f; padding: 4px; border-radius: 6px; }
+  .cell { width: var(--cell); height: var(--cell); background: #d9d2b8; position: relative; display: flex; align-items: center; justify-content: center;
+          font-size: calc(var(--cell) * .24); color: #fff; font-weight: 700; user-select: none; cursor: pointer; border-radius: 2px; }
+  .cell.TW { background: #c0392b; } .cell.DW { background: #e8909a; } .cell.TL { background: #2a6fb5; } .cell.DL { background: #8ec5ea; color: #134; }
+  .cell.center { background: #e8909a; font-size: calc(var(--cell) * .6); }
+  .tile { width: 100%; height: 100%; background: #f3d89a; border-radius: 3px; color: #222; display: flex; align-items: center; justify-content: center;
+          font-size: calc(var(--cell) * .55); font-weight: 700; position: relative; box-shadow: inset 0 -2px 0 #c9a85a; }
+  .tile small { position: absolute; right: 3px; bottom: 1px; font-size: calc(var(--cell) * .24); font-weight: 600; }
+  .tile.joker { color: #b0301f; }
+  .tile.pending { background: #ffe9a8; outline: 3px solid #e8b84a; }
+  .tile.sel { outline: 3px solid #2a6fb5; transform: translateY(-4px); }
+  .tile.xch { outline: 3px dashed #c0392b; }
+  #side { width: 340px; display: flex; flex-direction: column; gap: 12px; }
+  .panel { background: #f4f1e6; border-radius: 8px; padding: 12px; }
+  .player { display: flex; justify-content: space-between; padding: 4px 8px; border-radius: 4px; }
+  .player.turn { background: #e8b84a; font-weight: 700; }
+  .player.you::after { content: " (vy)"; }
+  #rack { display: flex; gap: 6px; min-height: 52px; }
+  #rack .tile { width: 48px; height: 48px; font-size: 26px; cursor: pointer; flex: none; }
+  #rack .tile small { font-size: 11px; }
+  button { padding: 8px 12px; border: 0; border-radius: 6px; background: #2b3a2f; color: #fff; cursor: pointer; font-size: 14px; }
+  button:disabled { opacity: .4; cursor: default; }
+  button.primary { background: #2a8f4a; }
+  .row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  #msg { min-height: 20px; margin-top: 6px; font-size: 14px; }
+  #msg.err { color: #b0301f; } #msg.ok { color: #1d6b36; }
+  #log { max-height: 180px; overflow: auto; font-size: 13px; }
+  #log div { padding: 2px 0; border-bottom: 1px solid #ddd; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Slovenský Scrabble</h1>
+  <span>Sedíte ako:</span><span id="seats"></span>
+</header>
+<main>
+  <div id="board"></div>
+  <div id="side">
+    <div class="panel">
+      <div id="players"></div>
+      <div id="bag" style="margin-top:8px;font-size:13px"></div>
+      <div class="row"><input id="nameInput" maxlength="20" placeholder="Vaše meno" style="flex:1;padding:6px"><button id="saveName">Uložiť meno</button></div>
+    </div>
+    <div class="panel">
+      <div id="turnInfo" style="margin-bottom:6px;font-weight:700"></div>
+      <div id="rack"></div>
+      <div id="msg"></div>
+      <div class="row">
+        <button id="play" class="primary">Zahrať</button>
+        <button id="recall">Vrátiť</button>
+        <button id="shuffle">Premiešať</button>
+        <button id="exchange">Vymeniť</button>
+        <button id="pass">Vynechať</button>
+      </div>
+    </div>
+    <div class="panel"><b>História</b><div id="log"></div></div>
+    <div class="panel"><button id="newGame">Nová hra</button></div>
+  </div>
+</main>
+<script>
+const seat = parseInt(new URLSearchParams(location.search).get('p') ?? '0', 10);
+let S = null;            // server state
+let pending = [];        // {r,c,letter,joker,rackIdx}
+let selected = null;     // selected rack index
+let exchangeMode = false, xchSet = new Set();
+let order = null;        // local rack ordering (indexes into S.rack)
+let lastRackKey = '';
+
+const $ = id => document.getElementById(id);
+const api = async (path, body) => {
+  const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ player: seat, ...body }) });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || 'Chyba');
+  return j;
+};
+const msg = (t, cls = '') => { $('msg').textContent = t; $('msg').className = cls; };
+
+async function refresh() {
+  const r = await fetch(`/api/state?p=${seat}`);
+  const ns = await r.json();
+  const key = ns.gameId + ':' + ns.rack.join('');
+  if (key !== lastRackKey) { pending = []; selected = null; exchangeMode = false; xchSet.clear(); order = ns.rack.map((_, i) => i); lastRackKey = key; }
+  S = ns;
+  render();
+}
+
+function tileEl(letter, joker, cls = '') {
+  const d = document.createElement('div');
+  d.className = 'tile ' + cls + (joker ? ' joker' : '');
+  d.textContent = letter === '?' ? '' : letter;
+  const s = document.createElement('small');
+  s.textContent = joker || letter === '?' ? '0' : S.points[letter];
+  d.appendChild(s);
+  return d;
+}
+
+function render() {
+  const names = { TW: '3×S', DW: '2×S', TL: '3×P', DL: '2×P' };
+  const b = $('board'); b.innerHTML = '';
+  for (let r = 0; r < S.size; r++) for (let c = 0; c < S.size; c++) {
+    const el = document.createElement('div');
+    const prem = S.premium[r][c];
+    el.className = 'cell ' + prem + (r === 7 && c === 7 ? ' center' : '');
+    const placed = S.board[r][c];
+    const pend = pending.find(p => p.r === r && p.c === c);
+    if (placed) el.appendChild(tileEl(placed.l, placed.j));
+    else if (pend) el.appendChild(tileEl(pend.letter, pend.joker, 'pending'));
+    else el.textContent = r === 7 && c === 7 ? '★' : (names[prem] || '');
+    el.onclick = () => onCell(r, c, placed, pend);
+    b.appendChild(el);
+  }
+
+  $('seats').innerHTML = '';
+  for (let i = 0; i < 4; i++) {
+    const a = document.createElement('a'); a.href = `/?p=${i}`; a.textContent = S.players[i].name;
+    if (i === seat) a.className = 'me';
+    $('seats').appendChild(a); $('seats').append(' ');
+  }
+
+  $('players').innerHTML = S.players.map((p, i) =>
+    `<div class="player ${i === S.turn && !S.over ? 'turn' : ''} ${i === seat ? 'you' : ''}"><span>${esc(p.name)}</span><span>${p.score} b. · ${p.rackCount}×</span></div>`).join('');
+  $('bag').textContent = `Vo vrecúšku: ${S.bagCount} z ${S.tileCount.letters + S.tileCount.jokers} (${S.tileCount.letters} písmen + ${S.tileCount.jokers} žolíky)`;
+
+  const mine = !S.over && S.turn === seat;
+  $('turnInfo').textContent = S.over ? `Koniec hry. Víťaz: ${S.winner.map(i => S.players[i].name).join(', ')}` :
+    mine ? 'Ste na ťahu' : `Na ťahu: ${S.players[S.turn].name}`;
+
+  const rack = $('rack'); rack.innerHTML = '';
+  const used = new Set(pending.map(p => p.rackIdx));
+  order.forEach(i => {
+    if (used.has(i)) return;
+    const l = S.rack[i];
+    const el = tileEl(l, l === '?', (selected === i ? 'sel ' : '') + (xchSet.has(i) ? 'xch' : ''));
+    el.onclick = () => {
+      if (exchangeMode) { xchSet.has(i) ? xchSet.delete(i) : xchSet.add(i); }
+      else selected = selected === i ? null : i;
+      render();
+    };
+    rack.appendChild(el);
+  });
+
+  $('play').disabled = !mine || !pending.length;
+  $('recall').disabled = !pending.length;
+  $('exchange').disabled = !mine || S.bagCount < 7;
+  $('exchange').textContent = exchangeMode ? 'Potvrdiť výmenu' : 'Vymeniť';
+  $('pass').disabled = !mine;
+  $('log').innerHTML = S.log.slice().reverse().map(l => `<div>${esc(l.text)}</div>`).join('');
+}
+
+const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+function onCell(r, c, placed, pend) {
+  if (placed) return;
+  if (pend) { pending = pending.filter(p => p !== pend); return preview(), render(); }
+  if (selected === null || exchangeMode) return;
+  let letter = S.rack[selected], joker = false;
+  if (letter === '?') {
+    const x = (prompt('Aké písmeno zastupuje žolík?') || '').trim().toUpperCase();
+    if (!x || x.length !== 1 || !(x in S.points)) return msg('Neplatné písmeno žolíka.', 'err');
+    letter = x; joker = true;
+  }
+  pending.push({ r, c, letter, joker, rackIdx: selected });
+  selected = null;
+  render(); preview();
+}
+
+async function preview() {
+  if (!pending.length || S.turn !== seat) return msg('');
+  try {
+    const j = await api('/api/preview', { tiles: pending });
+    msg(`${j.words.map(w => `${w.word} (${w.points})`).join(', ')}${j.bingo ? ' + 50 bonus' : ''} = ${j.points} b.`, 'ok');
+  } catch (e) { msg(e.message, 'err'); }
+}
+
+$('play').onclick = async () => {
+  try { await api('/api/play', { tiles: pending }); msg(''); await refresh(); }
+  catch (e) { msg(e.message, 'err'); }
+};
+$('recall').onclick = () => { pending = []; selected = null; msg(''); render(); };
+$('shuffle').onclick = () => { order.sort(() => Math.random() - .5); render(); };
+$('pass').onclick = async () => {
+  if (!confirm('Naozaj vynechať ťah?')) return;
+  try { await api('/api/pass', {}); await refresh(); } catch (e) { msg(e.message, 'err'); }
+};
+$('exchange').onclick = async () => {
+  if (!exchangeMode) { pending = []; exchangeMode = true; xchSet.clear(); msg('Vyberte písmená na výmenu a potvrďte.'); return render(); }
+  try { await api('/api/exchange', { letters: [...xchSet].map(i => S.rack[i]) }); await refresh(); }
+  catch (e) { msg(e.message, 'err'); }
+};
+$('newGame').onclick = async () => {
+  if (!confirm('Začať novú hru? Aktuálna hra sa stratí.')) return;
+  const names = [0, 1, 2, 3].map(i => prompt(`Meno hráča ${i + 1}:`, `Hráč ${i + 1}`) || `Hráč ${i + 1}`);
+  await api('/api/new', { names }); lastRackKey = ''; await refresh();
+};
+
+$('saveName').onclick = async () => {
+  try { await api('/api/name', { name: $('nameInput').value }); localStorage.setItem('scrabbleName' + seat, $('nameInput').value.trim()); await refresh(); msg('Meno uložené.', 'ok'); }
+  catch (e) { msg(e.message, 'err'); }
+};
+
+refresh().then(() => {
+  const saved = localStorage.getItem('scrabbleName' + seat);
+  $('nameInput').value = saved || S.players[seat].name;
+  if (saved && saved !== S.players[seat].name) $('saveName').onclick();
+});
+setInterval(() => { if (!pending.length && !exchangeMode) refresh().catch(() => {}); }, 2500);
+</script>
+</body>
+</html>

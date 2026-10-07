@@ -1,0 +1,9 @@
+# Extra words missing from the hunspell dictionary. One per line.
+smrk
+smrka
+smrku
+smrky
+smrkom
+smrkov
+smrkoch
+smrkmi
