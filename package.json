@@ -2,5 +2,11 @@
   "name": "slovak-scrabble",
   "version": "1.0.0",
   "private": true,
-  "scripts": { "start": "node server.js", "build-dict": "node build-dict.js" }
+  "scripts": {
+    "start": "node server.js",
+    "build-dict": "node build-dict.js"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.18.0"
+  }
 }

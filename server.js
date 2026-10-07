@@ -1,13 +1,18 @@
-// Slovak Scrabble for 4 players - dependency-free Node HTTP server.
-// Game state is kept in memory and persisted to data/state.json after every action.
+// Slovak Scrabble for 2–4 players - dependency-free Node HTTP server.
+// Game state is persisted to Turso when configured, with a local JSON fallback.
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { createClient } = require('@libsql/client');
 
 const PORT = process.env.PORT || 3000;
-const HOST = process.env.HOST || '127.0.0.1';
-const STATE_FILE = path.join(__dirname, 'data', 'state.json');
-const SIZE = 15, RACK = 7, BINGO = 50, PLAYERS = 4;
+const HOST = process.env.HOST || '0.0.0.0';
+const STATE_FILE = process.env.STATE_FILE || path.join(__dirname, 'data', 'state.json');
+const TURSO_DATABASE_URL = (process.env.TURSO_DATABASE_URL || '').trim();
+const TURSO_AUTH_TOKEN = (process.env.TURSO_AUTH_TOKEN || '').trim();
+const TURSO_CONFIGURED = Boolean(TURSO_DATABASE_URL && (TURSO_AUTH_TOKEN || TURSO_DATABASE_URL.startsWith('file:')));
+const CLOUD_STATE_TABLE = 'scrabble_game_state';
+const SIZE = 15, RACK = 7, BINGO = 50, MIN_PLAYERS = 2, MAX_PLAYERS = 4;
 
 // letter -> [count, points]; 110 letters + 2 jokers ('?', 0 points); source: hramescrabble.sk ("slovenský m" + Q, W)
 const TILES = {
@@ -37,6 +42,11 @@ console.log(`Dictionary: ${WORDS.size} words`);
 
 // --- game state ---
 let game = null;
+let turso = null;
+let cloudConnected = false;
+let cloudError = null;
+let cloudWritesPending = 0;
+let cloudWriteQueue = Promise.resolve();
 
 function newBag() {
   const bag = [];
@@ -53,27 +63,85 @@ function refill(p) {
   while (p.rack.length < RACK && game.bag.length) p.rack.push(game.bag.pop());
 }
 
-function newGame(names) {
+function newGame(names, playerCount = 2) {
+  const count = Number(playerCount);
+  if (!Number.isInteger(count) || count < MIN_PLAYERS || count > MAX_PLAYERS) {
+    fail(`Počet hráčov musí byť od ${MIN_PLAYERS} do ${MAX_PLAYERS}.`);
+  }
   game = {
     id: Date.now(),
     board: Array.from({ length: SIZE }, () => Array(SIZE).fill(null)), // {l: letter, j: isJoker}
     bag: newBag(),
-    players: Array.from({ length: PLAYERS }, (_, i) => ({
+    players: Array.from({ length: count }, (_, i) => ({
       name: (names && names[i] && String(names[i]).slice(0, 20)) || `Hráč ${i + 1}`, rack: [], score: 0,
     })),
     turn: 0, firstMove: true, passes: 0, over: false, winner: null, log: [],
   };
   game.players.forEach(refill);
-  game.turn = Math.floor(Math.random() * PLAYERS);
+  game.turn = Math.floor(Math.random() * count);
   save();
 }
 
 function save() {
+  fs.mkdirSync(path.dirname(STATE_FILE), { recursive: true });
   fs.writeFileSync(STATE_FILE, JSON.stringify(game));
+  if (!turso) return Promise.resolve();
+
+  const snapshot = JSON.stringify(game);
+  const savedAt = new Date().toISOString();
+  cloudWritesPending++;
+  cloudWriteQueue = cloudWriteQueue.then(async () => {
+    await ensureCloudTable();
+    await turso.execute({
+      sql: `INSERT INTO ${CLOUD_STATE_TABLE} (id, state_json, updated_at) VALUES (1, ?, ?) ON CONFLICT(id) DO UPDATE SET state_json = excluded.state_json, updated_at = excluded.updated_at`,
+      args: [snapshot, savedAt],
+    });
+    cloudConnected = true;
+    cloudError = null;
+  }).catch(error => {
+    cloudConnected = false;
+    cloudError = error;
+    console.error('Turso save failed; local save remains available. Check the private Render environment settings.');
+  }).finally(() => { cloudWritesPending--; });
+  return cloudWriteQueue;
 }
 
-function load() {
-  try { game = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch { newGame(); }
+async function ensureCloudTable() {
+  await turso.execute(`CREATE TABLE IF NOT EXISTS ${CLOUD_STATE_TABLE} (id INTEGER PRIMARY KEY CHECK (id = 1), state_json TEXT NOT NULL, updated_at TEXT NOT NULL)`);
+}
+
+async function load() {
+  if (TURSO_CONFIGURED) {
+    turso = createClient({ url: TURSO_DATABASE_URL, authToken: TURSO_AUTH_TOKEN || undefined });
+    try {
+      await ensureCloudTable();
+      const result = await turso.execute(`SELECT state_json FROM ${CLOUD_STATE_TABLE} WHERE id = 1`);
+      if (result.rows.length) {
+        game = JSON.parse(result.rows[0].state_json);
+        cloudConnected = true;
+        cloudError = null;
+        console.log('Game state loaded from Turso cloud database.');
+        return;
+      }
+      cloudConnected = true;
+      console.log('Turso is connected; no saved game found yet.');
+    } catch (error) {
+      cloudConnected = false;
+      cloudError = error;
+      console.error('Turso unavailable; trying local game state. Check the private Render environment settings.');
+    }
+  } else if (TURSO_DATABASE_URL || TURSO_AUTH_TOKEN) {
+    cloudError = new Error('Both TURSO_DATABASE_URL and TURSO_AUTH_TOKEN are required.');
+    console.error(cloudError.message);
+  }
+
+  try {
+    game = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+    if (turso) await save(); // Migrate the existing local game into a newly configured database.
+  } catch {
+    newGame();
+    await cloudWriteQueue;
+  }
 }
 
 // --- move logic ---
@@ -160,7 +228,7 @@ function evaluateMove(player, placed) {
 }
 
 function endTurn() {
-  game.turn = (game.turn + 1) % PLAYERS;
+  game.turn = (game.turn + 1) % game.players.length;
 }
 
 function finishGame() {
@@ -211,7 +279,7 @@ const actions = {
   pass(pi) {
     requireTurn(pi);
     game.log.push({ text: `${game.players[pi].name} vynecháva ťah.` });
-    if (++game.passes >= PLAYERS * 2) finishGame(); else endTurn();
+    if (++game.passes >= game.players.length * 2) finishGame(); else endTurn();
     save();
     return { ok: true };
   },
@@ -247,7 +315,8 @@ function publicState(pi) {
     size: SIZE, premium: PREMIUM, points: POINTS, board: game.board, bagCount: game.bag.length,
     players: game.players.map((p, i) => ({ name: p.name, score: p.score, rackCount: p.rack.length, you: i === pi })),
     turn: game.turn, over: game.over, winner: game.winner, log: game.log.slice(-30),
-    rack: pi >= 0 && pi < PLAYERS ? game.players[pi].rack : [], seat: pi,
+    rack: pi >= 0 && pi < game.players.length ? game.players[pi].rack : [], seat: pi,
+    playerCount: game.players.length,
     gameId: game.id, firstMove: game.firstMove,
     tileCount: { letters: Object.values(TILES).reduce((s, v) => s + v[0], 0), jokers: 2 },
   };
@@ -272,6 +341,16 @@ function send(res, code, obj) {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   try {
+    if (req.method === 'GET' && url.pathname === '/api/health') return send(res, 200, { ok: true });
+    if (req.method === 'GET' && url.pathname === '/api/storage') {
+      return send(res, 200, {
+        provider: TURSO_CONFIGURED ? 'turso' : 'local',
+        configured: TURSO_CONFIGURED,
+        connected: cloudConnected,
+        pendingWrites: cloudWritesPending,
+        detail: cloudError ? 'Cloud save is unavailable; local backup is active.' : null,
+      });
+    }
     if (req.method === 'GET' && url.pathname === '/api/state') {
       const p = parseInt(url.searchParams.get('p'), 10);
       return send(res, 200, publicState(Number.isInteger(p) ? p : -1));
@@ -279,12 +358,18 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname.startsWith('/api/')) {
       const body = await readBody(req);
       const pi = Number.isInteger(body.player) ? body.player : -1;
-      if (url.pathname === '/api/new') { newGame(body.names); return send(res, 200, { ok: true }); }
-      if (pi < 0 || pi >= PLAYERS) fail('Neplatný hráč.');
+      if (url.pathname === '/api/new') {
+        newGame(body.names, body.playerCount);
+        await cloudWriteQueue;
+        return send(res, 200, { ok: true });
+      }
+      if (pi < 0 || pi >= game.players.length) fail('Vyberte platné miesto pri stole.');
       if (url.pathname === '/api/preview') return send(res, 200, actions.play(pi, body, false));
       const name = url.pathname.slice(5);
       if (!['play', 'pass', 'exchange', 'name'].includes(name)) return send(res, 404, { error: 'Not found' });
-      return send(res, 200, actions[name](pi, body, true));
+      const result = actions[name](pi, body, true);
+      await cloudWriteQueue;
+      return send(res, 200, result);
     }
     if (req.method === 'GET') {
       const file = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
@@ -301,5 +386,12 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-load();
-server.listen(PORT, HOST, () => console.log(`Scrabble: http://${HOST}:${PORT}  (hráči: /?p=0 .. /?p=3)`));
+load().then(() => {
+  server.listen(PORT, HOST, () => {
+    const storage = TURSO_CONFIGURED ? (cloudConnected ? 'Turso cloud' : 'Turso configured, using local fallback') : 'local JSON';
+    console.log(`Scrabble: http://${HOST}:${PORT}  (miesta: /?p=0 .. /?p=${MAX_PLAYERS - 1}, úložisko: ${storage})`);
+  });
+}).catch(error => {
+  console.error('Game initialization failed:', error);
+  process.exitCode = 1;
+});

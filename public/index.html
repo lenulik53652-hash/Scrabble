@@ -3,82 +3,148 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#15362b">
+<meta name="description" content="Zahrajte si slovenský Scrabble s rodinou a priateľmi na diaľku.">
 <title>Slovenský Scrabble</title>
 <style>
-  :root { --cell: min(5.6vw, 44px); }
-  body { font-family: system-ui, sans-serif; margin: 0; background: #2b3a2f; color: #222; }
-  header { background: #1c261f; color: #fff; padding: 8px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-  header h1 { font-size: 18px; margin: 0 12px 0 0; }
-  header a { color: #cfe; padding: 3px 8px; border-radius: 4px; text-decoration: none; border: 1px solid #567; }
-  header a.me { background: #e8b84a; color: #000; border-color: #e8b84a; }
-  main { display: flex; gap: 16px; padding: 16px; flex-wrap: wrap; justify-content: center; }
-  #board { display: grid; grid-template-columns: repeat(15, var(--cell)); gap: 2px; background: #1c261f; padding: 4px; border-radius: 6px; }
-  .cell { width: var(--cell); height: var(--cell); background: #d9d2b8; position: relative; display: flex; align-items: center; justify-content: center;
-          font-size: calc(var(--cell) * .24); color: #fff; font-weight: 700; user-select: none; cursor: pointer; border-radius: 2px; }
-  .cell.TW { background: #c0392b; } .cell.DW { background: #e8909a; } .cell.TL { background: #2a6fb5; } .cell.DL { background: #8ec5ea; color: #134; }
-  .cell.center { background: #e8909a; font-size: calc(var(--cell) * .6); }
-  .tile { width: 100%; height: 100%; background: #f3d89a; border-radius: 3px; color: #222; display: flex; align-items: center; justify-content: center;
-          font-size: calc(var(--cell) * .55); font-weight: 700; position: relative; box-shadow: inset 0 -2px 0 #c9a85a; }
-  .tile small { position: absolute; right: 3px; bottom: 1px; font-size: calc(var(--cell) * .24); font-weight: 600; }
-  .tile.joker { color: #b0301f; }
-  .tile.pending { background: #ffe9a8; outline: 3px solid #e8b84a; }
-  .tile.sel { outline: 3px solid #2a6fb5; transform: translateY(-4px); }
-  .tile.xch { outline: 3px dashed #c0392b; }
-  #side { width: 340px; display: flex; flex-direction: column; gap: 12px; }
-  .panel { background: #f4f1e6; border-radius: 8px; padding: 12px; }
-  .player { display: flex; justify-content: space-between; padding: 4px 8px; border-radius: 4px; }
-  .player.turn { background: #e8b84a; font-weight: 700; }
-  .player.you::after { content: " (vy)"; }
-  #rack { display: flex; gap: 6px; min-height: 52px; }
-  #rack .tile { width: 48px; height: 48px; font-size: 26px; cursor: pointer; flex: none; }
-  #rack .tile small { font-size: 11px; }
-  button { padding: 8px 12px; border: 0; border-radius: 6px; background: #2b3a2f; color: #fff; cursor: pointer; font-size: 14px; }
-  button:disabled { opacity: .4; cursor: default; }
-  button.primary { background: #2a8f4a; }
-  .row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
-  #msg { min-height: 20px; margin-top: 6px; font-size: 14px; }
-  #msg.err { color: #b0301f; } #msg.ok { color: #1d6b36; }
-  #log { max-height: 180px; overflow: auto; font-size: 13px; }
-  #log div { padding: 2px 0; border-bottom: 1px solid #ddd; }
+  :root { color-scheme: light; --felt:#173a2e; --felt-deep:#102c23; --gold:#e9bd68; --paper:#fffdf6; --ink:#18261f; --muted:#748078; --line:#e6e9df; --cell:min(5.35vw, 43px); }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; color:var(--ink); background:radial-gradient(ellipse at 50% -20%,#315b49 0,#173a2e 52%,#102c23 100%); }
+  header { min-height:74px; display:flex; align-items:center; justify-content:space-between; gap:16px; padding:13px clamp(16px,4vw,52px); color:#fff; background:rgba(12,34,27,.62); border-bottom:1px solid rgba(255,255,255,.1); box-shadow:0 10px 35px #09201730; }
+  .brand { display:flex; align-items:center; gap:13px; }
+  .brand-mark { width:42px; height:42px; display:grid; place-items:center; border:1px solid #e9bd6880; border-radius:14px; color:var(--gold); font-family:Georgia,serif; font-size:27px; box-shadow:inset 0 0 18px #e9bd6818; }
+  header h1 { margin:0; font-family:Georgia,"Times New Roman",serif; font-size:clamp(19px,3vw,26px); font-weight:600; letter-spacing:.01em; }
+  .subtitle { margin-top:3px; color:#c1d0c8; font-size:12px; letter-spacing:.08em; text-transform:uppercase; }
+  .header-actions { display:flex; align-items:center; gap:12px; }
+  .connection { display:flex; align-items:center; gap:7px; color:#d3e3d9; font-size:12px; white-space:nowrap; }
+  .connection::before { width:8px; height:8px; border-radius:50%; background:#79d69a; box-shadow:0 0 12px #79d69a99; content:""; }
+  .connection.offline::before { background:#f0a782; box-shadow:0 0 12px #f0a78299; }
+  .connection.local::before { background:#e9bd68; box-shadow:0 0 12px #e9bd6899; }
+  main { display:grid; grid-template-columns:minmax(0,1fr) 350px; align-items:start; gap:24px; width:min(1220px,100%); margin:0 auto; padding:26px clamp(14px,3vw,34px) 40px; }
+  .game-area { min-width:0; }
+  .table-heading { display:flex; align-items:center; justify-content:space-between; gap:14px; margin:0 0 13px; color:white; }
+  .table-heading h2 { margin:0; font-family:Georgia,"Times New Roman",serif; font-size:20px; font-weight:500; }
+  .table-heading p { margin:4px 0 0; color:#bdd0c4; font-size:12px; }
+  .board-wrap { overflow:auto; padding:8px; border:1px solid #ffffff20; border-radius:20px; background:linear-gradient(145deg,#f8f3e6,#e7e1d0); box-shadow:0 18px 50px #081d1570,inset 0 1px #fff; }
+  #board { display:grid; grid-template-columns:repeat(15,var(--cell)); gap:2px; width:max-content; margin:auto; padding:4px; border:1px solid #244b3b; border-radius:12px; background:#244b3b; box-shadow:0 6px 16px #102c2330; }
+  .cell { width:var(--cell); height:var(--cell); position:relative; display:flex; align-items:center; justify-content:center; border-radius:4px; background:#e8e5d7; color:#456051; font-size:clamp(7px,calc(var(--cell)*.22),10px); font-weight:800; user-select:none; cursor:pointer; transition:filter .15s,transform .15s; }
+  .cell:hover { filter:brightness(1.08); z-index:1; }
+  .cell.TW { background:#bd6655; color:#fff4e8; } .cell.DW { background:#dfa8a0; color:#543b35; } .cell.TL { background:#638eb2; color:#fff; } .cell.DL { background:#abc9d6; color:#29495b; }
+  .cell.center { background:#d9ae58; color:#fff9e9; font-size:calc(var(--cell)*.52); }
+  .tile { width:100%; height:100%; position:relative; display:flex; align-items:center; justify-content:center; border:1px solid #c5a45e; border-radius:5px; background:linear-gradient(145deg,#fff0c5,#e9cd8b); color:#302817; font-size:calc(var(--cell)*.55); font-weight:800; box-shadow:inset 0 -3px 0 #c3a35d,0 2px 4px #18261f30; }
+  .tile small { position:absolute; right:3px; bottom:1px; font-size:calc(var(--cell)*.22); font-weight:700; }
+  .tile.joker { color:#a34b38; } .tile.pending { background:linear-gradient(145deg,#fff5cb,#f8d975); outline:2px solid #e4a93d; animation:tile-pop .2s ease-out; }
+  .tile.sel { outline:3px solid #8dbbe3; transform:translateY(-6px); } .tile.xch { outline:3px dashed #bd6655; }
+  .tile.appear { animation:tile-drop .36s cubic-bezier(.2,.8,.25,1.25) both; }
+  #side { display:flex; flex-direction:column; gap:13px; }
+  .panel { padding:17px; border:1px solid #ffffffa8; border-radius:17px; background:var(--paper); box-shadow:0 10px 28px #081d1533; }
+  .panel h3 { margin:0 0 12px; font-family:Georgia,"Times New Roman",serif; font-size:18px; font-weight:600; }
+  .players-list { display:grid; gap:7px; }
+  .player { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 11px; border:1px solid transparent; border-radius:11px; background:#f4f3ec; font-size:13px; transition:background .2s,border-color .2s,transform .2s; }
+  .player.turn { border-color:#d2aa59; background:#fbf0d4; box-shadow:inset 3px 0 #d2aa59; }
+  .player.you { border-color:#a8c6af; background:#edf5ee; }
+  .player-name { min-width:0; overflow:hidden; color:#24352b; font-weight:700; text-overflow:ellipsis; white-space:nowrap; }
+  .player-score { color:#748078; font-size:11px; white-space:nowrap; }
+  .player.turn .player-score { color:#785a1f; }
+  .seat-links { display:flex; flex-wrap:wrap; gap:7px; margin-top:12px; }
+  .seat-link { display:inline-flex; min-height:34px; align-items:center; justify-content:center; padding:6px 10px; border:1px solid #d7dfd5; border-radius:999px; background:#fff; color:#385343; font-size:12px; font-weight:700; text-decoration:none; transition:all .18s; }
+  .seat-link:hover,.seat-link.me { border-color:#51785e; background:#eaf2e9; color:#234831; transform:translateY(-1px); }
+  .seat-hint { margin:10px 0 0; color:var(--muted); font-size:12px; line-height:1.5; }
+  .bag-count { margin:13px 0 0; padding-top:12px; border-top:1px solid var(--line); color:#68776c; font-size:12px; }
+  .turn-card { background:linear-gradient(145deg,#fffef9,#f2f4ed); }
+  #turnInfo { margin:0 0 13px; color:#344d3d; font-weight:750; }
+  .turn-eyebrow { margin-bottom:5px; color:#89958b; font-size:10px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
+  #rack { display:flex; min-height:54px; justify-content:center; gap:clamp(3px,1vw,8px); padding:9px 6px; border-radius:12px; background:#e9ece3; }
+  #rack .tile { width:clamp(35px,10vw,43px); height:clamp(35px,10vw,43px); flex:none; cursor:pointer; font-size:23px; transition:transform .16s,filter .16s; animation:tile-pop .26s ease-out both; }
+  #rack .tile:hover { filter:brightness(1.05); transform:translateY(-3px); }
+  #rack .tile small { font-size:10px; }
+  button { min-height:40px; padding:9px 13px; border:1px solid #d7dfd5; border-radius:10px; background:#f3f5ef; color:#2e4636; cursor:pointer; font:inherit; font-size:13px; font-weight:700; transition:transform .16s,box-shadow .16s,background .16s; }
+  button:hover:not(:disabled) { background:#e8eee5; box-shadow:0 4px 11px #173a2e16; transform:translateY(-1px); }
+  button:active:not(:disabled) { transform:translateY(1px); }
+  button:disabled { opacity:.42; cursor:not-allowed; }
+  button.primary { border-color:#285e43; background:#285e43; color:#fff; }
+  button.primary:hover:not(:disabled) { background:#1f5038; }
+  button.ghost-dark { border-color:#ffffff3c; background:#ffffff12; color:#fff; }
+  button.ghost-dark:hover:not(:disabled) { background:#ffffff24; }
+  .row { display:flex; gap:7px; flex-wrap:wrap; margin-top:11px; }
+  .row button { flex:1 1 auto; }
+  #msg { min-height:20px; margin-top:9px; color:#56695b; font-size:12px; line-height:1.5; }
+  #msg.err { color:#a34535; } #msg.ok { color:#287344; }
+  #bag { display:none; }
+  #log { max-height:205px; overflow:auto; color:#526056; font-size:12px; }
+  #log div { padding:8px 2px; border-bottom:1px solid var(--line); animation:fade-in .25s ease-out; }
+  #nameInput,.name-field { width:100%; min-width:0; padding:10px 11px; border:1px solid #dce2d8; border-radius:9px; background:#fff; color:var(--ink); font:inherit; font-size:13px; }
+  #nameInput:focus,.name-field:focus,select:focus { outline:3px solid #b5d0bb; border-color:#6a9776; }
+  .row input { flex:1 1 150px; }
+  dialog { width:min(480px,calc(100% - 28px)); max-height:90vh; padding:0; overflow:auto; border:1px solid #ffffffbb; border-radius:20px; background:var(--paper); color:var(--ink); box-shadow:0 24px 90px #081d1590; }
+  dialog::backdrop { background:#071d15b8; backdrop-filter:blur(5px); }
+  .dialog-content { padding:23px; }
+  .dialog-content h2 { margin:0 0 6px; font-family:Georgia,"Times New Roman",serif; font-size:25px; }
+  .dialog-content>p { margin:0 0 17px; color:#748078; font-size:13px; line-height:1.5; }
+  .field-label { display:block; margin:13px 0 6px; color:#54645a; font-size:12px; font-weight:750; }
+  #nameFields { display:grid; grid-template-columns:1fr 1fr; gap:0 12px; }
+  .dialog-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:20px; }
+  footer { padding:0 16px 22px; color:#a9bdb0; font-size:11px; text-align:center; }
+  @keyframes tile-drop { from { opacity:0; transform:translateY(-16px) scale(.78) rotate(-5deg); } to { opacity:1; transform:translateY(0) scale(1) rotate(0); } }
+  @keyframes tile-pop { from { opacity:0; transform:scale(.82); } to { opacity:1; transform:scale(1); } }
+  @keyframes fade-in { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
+  @media (min-width:1100px) { :root { --cell:min(4.4vw,43px); } }
+  @media (max-width:900px) { main { grid-template-columns:minmax(0,1fr); gap:16px; } #side { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); } .history-panel { grid-column:1/-1; } .panel { padding:14px; } }
+  @media (max-width:700px) { :root { --cell:min(5.6vw,36px); } header { min-height:64px; padding:10px 14px; } .brand-mark { width:37px;height:37px; } .subtitle { font-size:9px; } .connection { font-size:0; } .connection::before { width:9px;height:9px; } main { grid-template-columns:minmax(0,1fr); gap:14px; padding:16px 10px 26px; } .game-area { min-width:0; } .table-heading { margin:0 4px 9px; } .table-heading h2 { font-size:18px; } .board-wrap { padding:5px; border-radius:14px; } #board { gap:1px; padding:3px; border-radius:9px; } .cell { border-radius:2px; } #side { display:grid; grid-template-columns:1fr; gap:10px; } .panel { border-radius:14px; padding:14px; } .player { padding:8px 9px; } #rack { gap:5px; } #rack .tile { width:min(10.5vw,43px); height:min(10.5vw,43px); } .history-panel { order:3; } }
+  @media (max-width:380px) { :root { --cell:5.3vw; } .brand { gap:8px; } .header-actions { gap:7px; } .header-actions button { min-height:36px; padding:7px 9px; font-size:11px; } .panel { padding:12px; } }
+  @media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:.01ms!important; animation-iteration-count:1!important; scroll-behavior:auto!important; transition-duration:.01ms!important; } }
 </style>
 </head>
 <body>
 <header>
-  <h1>Slovenský Scrabble</h1>
-  <span>Sedíte ako:</span><span id="seats"></span>
+  <div class="brand"><div class="brand-mark" aria-hidden="true">S</div><div><h1>Slovenský Scrabble</h1><div class="subtitle">Hra slov, ktorá spája</div></div></div>
+  <div class="header-actions"><span id="connection" class="connection">Pripojené</span><button id="shareGame" class="ghost-dark" type="button">Zdieľať hru</button></div>
 </header>
 <main>
-  <div id="board"></div>
+  <section class="game-area" aria-label="Hracia plocha">
+    <div class="table-heading"><div><h2>Hracia plocha</h2><p>Vytvárajte slová a zbierajte body.</p></div><button id="newGame" class="ghost-dark" type="button">＋ Nová hra</button></div>
+    <div class="board-wrap"><div id="board" role="grid" aria-label="Hracia doska Scrabble"></div></div>
+  </section>
   <div id="side">
     <div class="panel">
-      <div id="players"></div>
-      <div id="bag" style="margin-top:8px;font-size:13px"></div>
-      <div class="row"><input id="nameInput" maxlength="20" placeholder="Vaše meno" style="flex:1;padding:6px"><button id="saveName">Uložiť meno</button></div>
+      <h3>Hráči</h3><div id="players" class="players-list"></div><div id="seats" class="seat-links" aria-label="Vyberte si miesto pri stole"></div>
+      <p id="seatHint" class="seat-hint"></p><p id="bag" class="bag-count"></p>
+      <div class="row"><input id="nameInput" maxlength="20" placeholder="Vaše meno" aria-label="Vaše meno"><button id="saveName" type="button">Uložiť</button></div>
     </div>
-    <div class="panel">
-      <div id="turnInfo" style="margin-bottom:6px;font-weight:700"></div>
+    <div class="panel turn-card">
+      <div class="turn-eyebrow">Priebeh hry</div><div id="turnInfo"></div>
       <div id="rack"></div>
       <div id="msg"></div>
       <div class="row">
-        <button id="play" class="primary">Zahrať</button>
+        <button id="play" class="primary" type="button">Zahrať</button>
         <button id="recall">Vrátiť</button>
         <button id="shuffle">Premiešať</button>
         <button id="exchange">Vymeniť</button>
         <button id="pass">Vynechať</button>
       </div>
     </div>
-    <div class="panel"><b>História</b><div id="log"></div></div>
-    <div class="panel"><button id="newGame">Nová hra</button></div>
+    <div class="panel history-panel"><h3>Posledné ťahy</h3><div id="log"></div></div>
   </div>
 </main>
+<footer>Každé písmeno je nová možnosť.</footer>
+<dialog id="newGameDialog" aria-labelledby="dialogTitle">
+  <form id="newGameForm" class="dialog-content">
+    <h2 id="dialogTitle">Nová partia</h2><p>Vyberte počet hráčov a zadajte mená. Ostatní sa môžu pripojiť z vlastného zariadenia výberom svojho miesta.</p>
+    <label class="field-label" for="playerCount">Počet hráčov</label>
+    <select id="playerCount" class="name-field"><option value="2">2 hráči</option><option value="3">3 hráči</option><option value="4">4 hráči</option></select>
+    <div id="nameFields"></div>
+    <div class="dialog-actions"><button id="cancelNewGame" type="button">Zrušiť</button><button class="primary" type="submit">Rozdať písmená</button></div>
+  </form>
+</dialog>
 <script>
-const seat = parseInt(new URLSearchParams(location.search).get('p') ?? '0', 10);
+let seat = Number.parseInt(new URLSearchParams(location.search).get('p') ?? '-1', 10);
 let S = null;            // server state
 let pending = [];        // {r,c,letter,joker,rackIdx}
 let selected = null;     // selected rack index
 let exchangeMode = false, xchSet = new Set();
 let order = null;        // local rack ordering (indexes into S.rack)
 let lastRackKey = '';
+let freshCells = new Set();
 
 const $ = id => document.getElementById(id);
 const api = async (path, body) => {
@@ -90,11 +156,37 @@ const api = async (path, body) => {
 const msg = (t, cls = '') => { $('msg').textContent = t; $('msg').className = cls; };
 
 async function refresh() {
-  const r = await fetch(`/api/state?p=${seat}`);
-  const ns = await r.json();
-  const key = ns.gameId + ':' + ns.rack.join('');
+  const [r, storageResponse] = await Promise.all([
+    fetch(`/api/state?p=${seat}`),
+    fetch('/api/storage'),
+  ]);
+  if (!r.ok) throw new Error('Stav hry sa nepodarilo načítať.');
+  const [ns, storage] = await Promise.all([r.json(), storageResponse.ok ? storageResponse.json() : Promise.resolve(null)]);
+  const key = ns.gameId + ':' + seat + ':' + ns.rack.join('');
+  freshCells = new Set();
+  if (S && S.gameId === ns.gameId) {
+    for (let r = 0; r < ns.size; r++) for (let c = 0; c < ns.size; c++) {
+      if (!S.board[r][c] && ns.board[r][c]) freshCells.add(`${r}:${c}`);
+    }
+  }
   if (key !== lastRackKey) { pending = []; selected = null; exchangeMode = false; xchSet.clear(); order = ns.rack.map((_, i) => i); lastRackKey = key; }
   S = ns;
+  $('connection').classList.remove('offline', 'local');
+  if (!storage?.configured) {
+    $('connection').classList.add('local');
+    $('connection').textContent = 'Len lokálne';
+    $('connection').title = 'Turso nie je nakonfigurované; po reštarte hostingu môže hra zaniknúť.';
+  } else if (!storage.connected) {
+    $('connection').classList.add('offline');
+    $('connection').textContent = 'Cloud nedostupný';
+    $('connection').title = storage.detail || 'Hra sa ukladá len lokálne.';
+  } else if (storage.pendingWrites > 0) {
+    $('connection').textContent = 'Ukladám do cloudu';
+    $('connection').title = 'Zmeny sa zapisujú do Turso.';
+  } else {
+    $('connection').textContent = 'Uložené v cloude';
+    $('connection').title = 'Herný stav je uložený v Turso.';
+  }
   render();
 }
 
@@ -117,7 +209,7 @@ function render() {
     el.className = 'cell ' + prem + (r === 7 && c === 7 ? ' center' : '');
     const placed = S.board[r][c];
     const pend = pending.find(p => p.r === r && p.c === c);
-    if (placed) el.appendChild(tileEl(placed.l, placed.j));
+    if (placed) el.appendChild(tileEl(placed.l, placed.j, freshCells.has(`${r}:${c}`) ? 'appear' : ''));
     else if (pend) el.appendChild(tileEl(pend.letter, pend.joker, 'pending'));
     else el.textContent = r === 7 && c === 7 ? '★' : (names[prem] || '');
     el.onclick = () => onCell(r, c, placed, pend);
@@ -125,19 +217,29 @@ function render() {
   }
 
   $('seats').innerHTML = '';
-  for (let i = 0; i < 4; i++) {
-    const a = document.createElement('a'); a.href = `/?p=${i}`; a.textContent = S.players[i].name;
-    if (i === seat) a.className = 'me';
-    $('seats').appendChild(a); $('seats').append(' ');
+  for (let i = 0; i < S.players.length; i++) {
+    const a = document.createElement('a'); a.href = `/?p=${i}`; a.className = 'seat-link';
+    a.textContent = `${i + 1}. ${S.players[i].name}`;
+    if (i === seat) a.classList.add('me');
+    $('seats').appendChild(a);
   }
 
   $('players').innerHTML = S.players.map((p, i) =>
-    `<div class="player ${i === S.turn && !S.over ? 'turn' : ''} ${i === seat ? 'you' : ''}"><span>${esc(p.name)}</span><span>${p.score} b. · ${p.rackCount}×</span></div>`).join('');
+    `<div class="player ${i === S.turn && !S.over ? 'turn' : ''} ${i === seat ? 'you' : ''}"><span class="player-name">${esc(p.name)}${i === seat ? ' · vy' : ''}</span><span class="player-score">${p.score} b. · ${p.rackCount} p.</span></div>`).join('');
   $('bag').textContent = `Vo vrecúšku: ${S.bagCount} z ${S.tileCount.letters + S.tileCount.jokers} (${S.tileCount.letters} písmen + ${S.tileCount.jokers} žolíky)`;
+  const validSeat = seat >= 0 && seat < S.players.length;
+  $('seatHint').textContent = validSeat
+    ? `Toto zariadenie hrá ako ${S.players[seat].name}. Ostatní si vyberú svoje miesto na svojom zariadení.`
+    : 'Vyberte si svoje miesto pri stole. Každý hráč si na svojom zariadení zvolí vlastné miesto.';
+  $('nameInput').disabled = !validSeat;
+  $('saveName').disabled = !validSeat;
+  if (document.activeElement !== $('nameInput')) {
+    $('nameInput').value = validSeat ? (localStorage.getItem('scrabbleName' + seat) || S.players[seat].name) : '';
+  }
 
   const mine = !S.over && S.turn === seat;
   $('turnInfo').textContent = S.over ? `Koniec hry. Víťaz: ${S.winner.map(i => S.players[i].name).join(', ')}` :
-    mine ? 'Ste na ťahu' : `Na ťahu: ${S.players[S.turn].name}`;
+    !validSeat ? 'Najprv si vyberte miesto pri stole.' : mine ? 'Ste na ťahu' : `Na ťahu: ${S.players[S.turn].name}`;
 
   const rack = $('rack'); rack.innerHTML = '';
   const used = new Set(pending.map(p => p.rackIdx));
@@ -154,7 +256,8 @@ function render() {
   });
 
   $('play').disabled = !mine || !pending.length;
-  $('recall').disabled = !pending.length;
+  $('recall').disabled = !validSeat || !pending.length;
+  $('shuffle').disabled = !validSeat || S.rack.length < 2;
   $('exchange').disabled = !mine || S.bagCount < 7;
   $('exchange').textContent = exchangeMode ? 'Potvrdiť výmenu' : 'Vymeniť';
   $('pass').disabled = !mine;
@@ -164,6 +267,7 @@ function render() {
 const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 function onCell(r, c, placed, pend) {
+  if (seat < 0 || seat >= S.players.length) return msg('Najprv si vyberte miesto pri stole.', 'err');
   if (placed) return;
   if (pend) { pending = pending.filter(p => p !== pend); return preview(), render(); }
   if (selected === null || exchangeMode) return;
@@ -201,10 +305,58 @@ $('exchange').onclick = async () => {
   try { await api('/api/exchange', { letters: [...xchSet].map(i => S.rack[i]) }); await refresh(); }
   catch (e) { msg(e.message, 'err'); }
 };
-$('newGame').onclick = async () => {
-  if (!confirm('Začať novú hru? Aktuálna hra sa stratí.')) return;
-  const names = [0, 1, 2, 3].map(i => prompt(`Meno hráča ${i + 1}:`, `Hráč ${i + 1}`) || `Hráč ${i + 1}`);
-  await api('/api/new', { names }); lastRackKey = ''; await refresh();
+function updateNameFields() {
+  const count = Number($('playerCount').value);
+  const fields = $('nameFields');
+  fields.innerHTML = '';
+  for (let i = 0; i < count; i++) {
+    const label = document.createElement('label');
+    label.className = 'field-label';
+    label.htmlFor = `playerName${i}`;
+    label.textContent = `Hráč ${i + 1}`;
+    const input = document.createElement('input');
+    input.id = `playerName${i}`;
+    input.className = 'name-field';
+    input.maxLength = 20;
+    input.placeholder = `Hráč ${i + 1}`;
+    input.value = S?.players[i]?.name || '';
+    fields.append(label, input);
+  }
+}
+
+$('playerCount').onchange = updateNameFields;
+$('newGame').onclick = () => {
+  $('playerCount').value = String(S?.playerCount || 2);
+  updateNameFields();
+  $('newGameDialog').showModal();
+};
+$('cancelNewGame').onclick = () => $('newGameDialog').close();
+$('newGameForm').onsubmit = async event => {
+  event.preventDefault();
+  if (S && !confirm('Začať novú hru? Aktuálna partia sa nahradí.')) return;
+  const count = Number($('playerCount').value);
+  const names = Array.from({ length: count }, (_, i) => $(`playerName${i}`).value.trim() || `Hráč ${i + 1}`);
+  try {
+    await api('/api/new', { names, playerCount: count });
+    $('newGameDialog').close();
+    if (seat < 0 || seat >= count) {
+      seat = 0;
+      history.replaceState(null, '', '/?p=0');
+    }
+    lastRackKey = '';
+    await refresh();
+  } catch (e) { msg(e.message, 'err'); }
+};
+
+$('shareGame').onclick = async () => {
+  const shareUrl = `${location.origin}/`;
+  const shareData = { title: 'Slovenský Scrabble', text: 'Pridaj sa k partii — vyber si svoje miesto pri stole.', url: shareUrl };
+  try {
+    if (navigator.share) await navigator.share(shareData);
+    else { await navigator.clipboard.writeText(shareUrl); msg('Odkaz na hru je skopírovaný. Každý hráč si potom vyberie svoje miesto.', 'ok'); }
+  } catch (e) {
+    if (e.name !== 'AbortError') msg('Odkaz na hru: ' + shareUrl, 'ok');
+  }
 };
 
 $('saveName').onclick = async () => {
@@ -213,11 +365,19 @@ $('saveName').onclick = async () => {
 };
 
 refresh().then(() => {
-  const saved = localStorage.getItem('scrabbleName' + seat);
-  $('nameInput').value = saved || S.players[seat].name;
-  if (saved && saved !== S.players[seat].name) $('saveName').onclick();
+  if (S.playerCount < 2) $('playerCount').value = '2';
+}).catch(() => {
+  $('connection').classList.add('offline');
+  $('connection').textContent = 'Offline';
+  msg('Server sa nedá dosiahnuť. Skontrolujte internetové pripojenie.', 'err');
 });
-setInterval(() => { if (!pending.length && !exchangeMode) refresh().catch(() => {}); }, 2500);
+setInterval(() => {
+  if (!pending.length && !exchangeMode) refresh().catch(() => {
+    $('connection').classList.add('offline');
+    $('connection').classList.remove('local');
+    $('connection').textContent = 'Offline';
+  });
+}, 2000);
 </script>
 </body>
 </html>
